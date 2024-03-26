@@ -1,0 +1,536 @@
+---
+title: "Customer Shopping Trend Analysis"
+author: "Jingwen REN/Dan ZHAO/Yining KONG/Shanwen TANG"
+date: "2024-03-04"
+format: 
+  html:
+    toc: true
+    toc_float: true
+    toc-location: left
+    highlight: zenburn
+    mainfont: Times New Roman
+    embed-resources: true
+execute: 
+  warning: false
+  echo: true
+  error: false
+---
+
+## Project Recap
+
+With a collection of 3900 records, the [**Customer Shopping Preferences Dataset**]{style="color: purple;"} reveal the purchasing patterns and preferences of our clients, and encompasses a broad spectrum of customer attributes.
+
+::: columns
+::: {.column width="60%"}
+we aim to achieve core objectives:
+
+-   [Data-Driven Product Optimization]{style="color: darkred;"}
+
+-   [Strategic Marketing Innovations]{style="color: darkblue;"}
+
+-   [Enhancement of Customer Experience]{style="color:darkgreen;"}
+:::
+
+::: {.column width="40%"}
+![](images/2091709029056_.pic-01.jpg)<!--.element:style="text-align:center;" -->
+:::
+:::
+
+### Dataset Glossary
+
+-   **Customer ID** - Unique identifier for each customer
+
+-   **Age** - Age of the customer
+
+-   **Gender** - Gender of the customer (Male/Female)
+
+-   **Item Purchased** - The item purchased by the customer
+
+-   **Category** - Category of the item purchased
+
+-   **Purchase Amount (USD)** - The amount of the purchase in USD
+
+-   **Location** - Location where the purchase was made
+
+-   **Size** - Size of the purchased item
+
+-   **Color** - Color of the purchased item
+
+-   **Season** - Season during which the purchase was made Review
+
+-   **Rating** - Rating given by the customer for the purchased item
+
+-   **Subscription Status** - Indicates if the customer has a subscription (Yes/No)
+
+-   **Shipping Type** - Type of shipping chosen by the customer
+
+-   **Discount Applied** - Indicates if a discount was applied to the purchase (Yes/No)
+
+-   **Promo Code Used** - Indicates if a promo code was used for the purchase (Yes/No)
+
+-   **Previous Purchases** - The total count of transactions concluded by the customer at the store, excluding the ongoing transaction
+
+-   **Payment Method** - Customer's most preferred payment method
+
+-   **Frequency of Purchases** - Frequency at which the customer makes purchases (e.g., Weekly, Fortnightly, Monthly)
+
+### Analytics Team
+
+We are the Analytics Team in **JD_KT** Audit Company:
+
+::: columns
+::: {.column width="10%"}
+:::
+
+::: {.column width="40%"}
+**Jingwen REN**
+
+**Dan ZHAO**
+
+**Yining KONG**
+
+**Shanwen TANG**
+:::
+
+::: {.column width="50%"}
+![](https://pic2.zhimg.com/v2-dae8b8f1b23a541cb589d8e4c1cddaed_b.jpg){fig-align="right" width="362"}
+:::
+:::
+
+## Data preparation
+
+### Packages Prepare
+
+```{r}
+library(tidyverse)
+library(knitr)
+library(gt)
+library(readxl)
+library(readr)
+library(ggplot2)
+library(dataMaid)
+library(RSQLite)
+library(tidytext) 
+library(dplyr)
+library(gridExtra)
+library(lubridate)
+library(janitor)
+library(ggthemes)
+```
+
+### Glimpse the data
+
+::: callout-tip
+#### shopping_trends_updated.csv
+
+Feature: Number of observations( 3900 ) Number of variables( 18 )
+:::
+
+```{r}
+#| echo: true
+#| warning: false
+shopping_trends_2 <- read_csv("shopping_trends_updated.csv")
+```
+
+::: callout-tip
+#### shopping_trends.csv
+
+Feature: Number of observations( 3900 ) Number of variables( 19 )
+:::
+
+```{r}
+#| echo: false
+#| warning: false
+shopping_trends_1 <- read_csv("shopping_trends.csv")
+```
+
+## Data Cleaning
+
+```{r}
+## Clean the col names
+shopping_trends_1 <-shopping_trends_1 %>%
+  clean_names()%>%
+  setNames(tools::toTitleCase(names(.)))
+
+shopping_trends_2 <-shopping_trends_2 %>%
+  clean_names()%>%
+  setNames(tools::toTitleCase(names(.)))
+
+## Check the results
+shopping_trends_1 %>%
+  head(1)
+
+shopping_trends_2%>%
+  head(1)
+```
+
+Then we use SQLite function to join two tables.
+
+```{r}
+## Use SQLite function to join two tables
+con <- dbConnect(RSQLite::SQLite(), dbname = "your_database.db")
+dbWriteTable(con, "shopping_trends_2_table", shopping_trends_2,overwrite = TRUE)
+dbWriteTable(con, "shopping_trends_1_table", shopping_trends_1,overwrite = TRUE)
+
+query <- "
+SELECT 
+  shopping_trends_2_table.*,
+  shopping_trends_1_table.Preferred_payment_method
+FROM 
+  shopping_trends_2_table
+LEFT JOIN 
+  shopping_trends_1_table 
+ON 
+  shopping_trends_2_table.Customer_id = shopping_trends_1_table.Customer_id
+"
+result1 <- dbGetQuery(con, query)
+
+apply(result1, 2, max, na.rm = TRUE)
+
+```
+
+## Data Summary
+
+```{r}
+shopping_trends <- as.data.frame(result1)
+
+summary(shopping_trends)
+```
+
+## Data Analysis
+
+### Analysis 1
+
+Group customers according to **age** and the proportion of **male and female** in each group.
+
+```{r}
+Age_group <- function(age) {
+  if (age >= 18 & age <= 35) {
+    return("Youth")
+  } else if (age > 35 & age <= 60) {
+    return("Middle_age")
+  } else {
+    return("Elderly")
+  }
+}
+
+
+df <- data.frame(Age = shopping_trends$Age, Gender = shopping_trends$Gender)
+df$Age_group <- sapply(df$Age, Age_group)
+summary_df <- df %>%
+  dplyr::group_by(Age_group, Gender) %>%
+  dplyr::summarize(count = n(), .groups = "drop") %>%
+  dplyr::group_by(Age_group) %>%
+  dplyr::mutate(total_count = sum(count),
+         percentage = paste0(round(count / total_count * 100, 2), "%")) %>%
+  dplyr::ungroup() %>%
+  dplyr::arrange(Age_group, desc(Gender)) %>%
+  dplyr::select(-total_count)
+```
+
+```{r}
+summary_df %>%
+  gt()
+```
+
+::: callout-tip
+#### Result
+
+The **Middle age** Group (35-60) has the larest number (including male and female).
+
+The proportion of **male** is larger than **female** in all groups.
+:::
+
+### Analysis 2
+
+The most popular **category**, and the three largest **items** proportion in this category.
+
+```{r}
+# 2.1The most popular category
+ Category_group <- shopping_trends %>%
+  group_by(Category) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count))
+pie(Category_group$count, 
+    labels = Category_group$Category, main = "Pie Chart")
+
+```
+
+::: callout-tip
+#### Result
+
+The most popular category is Clothing.
+:::
+
+```{r}
+# 2.2 The three largest items proportion in Clothing
+ items_category <- dplyr:::select(shopping_trends,Item_purchased, Category)
+ items_category_1 <-items_category %>%
+   dplyr:::filter(Category == "Clothing")%>%
+   group_by(Item_purchased)%>%
+   summarise(count = n())%>%
+   slice_max(order_by=Item_purchased,
+            n=3)
+items_category_1 %>%
+  gt()
+```
+
+::: callout-tip
+#### Result
+
+**T-shirt, Sweater, Socks** are the largest items in the largest category.
+:::
+
+### Analysis 3
+
+The **Season** correlate with the **purchase amount**.
+
+```{r}
+shopping_trends$Season <- factor(shopping_trends$Season, levels = c("Spring", "Summer", "Fall", "Winter"))
+ggplot(shopping_trends) +
+ aes(x = Season, y = Purchase_amount_usd) +
+ geom_boxplot(fill = "#112446") +
+ labs(x = "Season", y = "Purchase amount USD", title = "Season vs. Purchase Amount ") +
+theme(axis.text.x = element_text(size = 15))+
+ theme_minimal()
+
+```
+
+::: callout-tip
+#### Result
+
+The season of Fall is the highest in Purchase amount.
+:::
+
+### Analysis 4
+
+The most common shipping type for customers with a review rating above 4.
+
+```{r}
+common_type <- shopping_trends %>%
+  filter(Review_rating > 4) %>%
+  group_by(Shipping_type) %>%
+  summarise(n = n()) %>%
+  arrange(desc(n)) %>%
+  slice(1)
+common_type %>%
+  gt()
+```
+
+::: callout-tip
+#### Result
+
+The most common shipping type for customers with a review rating above 4 is [**Standard**]{.underline}.
+:::
+
+### Analysis 5
+
+Best Color sold in each Season.
+
+```{r}
+season_color_sales <- shopping_trends %>%
+  group_by(Season, Color) %>%
+  summarise(Count = n()) 
+top_colors <- season_color_sales %>%
+  group_by(Season) %>%
+  top_n(1, Count)
+top_colors <- top_colors[match(c("Spring", "Summer", "Fall", "Winter"),
+                               top_colors$Season), ]
+top_colors %>%
+  ungroup() %>%
+  gt()
+```
+
+::: callout-tip
+#### Suggestion
+
+Optimise inventory management and supply chain strategies according to seasonal changes and color popularity. Design seasonal promotions and discount campaigns accordingly.
+:::
+
+### Analysis 6
+
+The average purchase amount for customers who have made more than 30 previous purchases.
+
+```{r}
+avg_purchase <- mean(
+  shopping_trends$Purchase_amount_usd[
+    shopping_trends$Previous_purchases > 30
+    ],
+  na.rm = TRUE
+  ) %>%
+  round(digits = 2)
+print(avg_purchase)
+```
+
+::: callout-tip
+#### Result
+
+The average purchase amount is [**60.03**]{.underline}.
+:::
+
+### Analysis 7
+
+The average purchase amount for customers who have a **subscription** and used **Venmo** as the payment method.
+
+```{r}
+
+# Filter for customers with a subscription and who used Venmo
+filtered_data <- shopping_trends %>%
+  filter(Subscription_status == "Yes", Payment_method == "Venmo")
+
+# Calculate the average purchase amount
+average_purchase_amount <- filtered_data %>%
+  summarise(AverageAmount = mean(Purchase_amount_usd))
+
+#print(average_purchase_amount)
+
+```
+
+::: callout-tip
+#### Result
+
+The average purchase amount for this customer group is **57.5 USD**.
+:::
+
+### Analysis 8
+
+Locations with stronger purchase power and more subscribed members.
+
+```{r}
+
+
+## Filter the subscribed members
+subscribed_members <- shopping_trends %>%
+  filter(Subscription_status == "Yes")
+
+## TOP6 Locations with stronger purchase power
+top6_purchase_power <- subscribed_members %>%
+  group_by(Location) %>%
+  summarise(Total_Purchase_Amount = sum(Purchase_amount_usd)) %>%
+  top_n(6, Total_Purchase_Amount)
+
+
+
+## TOP6 Locations with most Subscription members
+top6_members_count <- subscribed_members %>%
+  group_by(Location) %>%
+  summarise(Members_Count = n_distinct(Customer_id)) %>%
+  top_n(6, Members_Count)
+
+
+
+## bar charts
+top_purchases_plot <- 
+  ggplot(top6_purchase_power,
+         aes(x = reorder(Location, -Total_Purchase_Amount), 
+             y = Total_Purchase_Amount, fill = Location)) + 
+  geom_bar(stat = "identity") + 
+  geom_text(aes(label = sprintf("%.2f", Total_Purchase_Amount)), 
+            stat = "identity", 
+            position = position_stack(vjust = 0.5), 
+            colour = "white", size = 2) +
+  scale_fill_brewer(palette = "Set2", direction = 1) +
+  ggthemes::theme_fivethirtyeight() +
+  theme(text = element_text(size = 9),
+        plot.title = element_text(size = 9),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.key.size = unit(0.3, "cm"),
+        legend.title = element_blank()) +
+  labs(title = "Top 6 Locations by Total Purchase(USD)", x = "Location", y = "Total Purchase Amount (USD)")
+
+top_members_plot <- 
+  ggplot(top6_members_count, 
+         aes(x = reorder(Location, -Members_Count), 
+             y = Members_Count, fill = Location)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%0.0f", Members_Count)), 
+            stat = "identity", 
+            position = position_stack(vjust = 0.5), 
+            colour = "white", size = 2) +
+  scale_fill_brewer(palette = "Set2", direction = 1) +
+  ggthemes::theme_fivethirtyeight() +
+  theme(text = element_text(size = 9),
+        plot.title = element_text(size = 9),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.key.size = unit(0.3, "cm"),
+        legend.title = element_blank()) +
+  labs(title = "Top 6 Locations by Members", x = "Location", y = "Members Count")
+
+```
+
+------------------------------------------------------------------------
+
+::: callout-tip
+#### Finding
+
+[**Missouri**]{style="color: red;"} ranks among the top in terms of member registrations, yet their purchasing power is not very strong. [**Oklahoma**]{style="color: red;"} has relatively strong purchasing power [(ranking 5th among the 50 states)]{style="color: blue;"}, but they do not have many registered members.
+:::
+
+```{r}
+grid.arrange(top_purchases_plot, top_members_plot, ncol = 2)
+
+```
+
+### Recommendations
+
+::: columns
+::: {.column width="35%"}
+![](https://img1.baidu.com/it/u=2580407220,2932096668&fm=253&fmt=auto&app=138&f=JPEG?w=598&h=500){width="489"}
+
+![](https://img2.baidu.com/it/u=2652785245,2725194361&fm=253&fmt=auto&app=138&f=JPEG?w=610&h=426){width="480"}
+:::
+
+::: {.column width="65%"}
+##### For Missouri:
+
+-   <small> [**Increase exclusive member discounts**]{style="color: purple;"}: To enhance purchasing power, offer exclusive discounts and double points accumulation for members, encouraging consumption.</small>
+
+-   <small> [**Enhance user engagement**]{style="color: purple;"}: By hosting exclusive events for members, increase their sense of participation and brand loyalty, thereby enhancing their willingness to purchase.</small>
+
+##### For Oklahoma:
+
+-   <small> [**Referral reward program**]{style="color: purple;"}: Implement a referral reward program to encourage existing members to refer new users to register as members, attracting more users through word-of-mouth.</small>
+
+-   <small> [**Coupons and trials**]{style="color: purple;"}: Provide coupons or free trials for new registered users to lower their initial purchase threshold.</small>
+:::
+:::
+
+## Strategic proposals
+
+::: columns
+::: {.column width="35%"}
+![](https://img2.baidu.com/it/u=2450152819,3053830969&fm=253&fmt=auto&app=138&f=JPEG?w=304&h=430){width="400"}
+:::
+
+::: {.column width="65%"}
+-   <small> For [**customers of different age groups**]{style="color: purple;"}, develop marketing campaigns that specifically target the **Middle Age** demographic, focusing on their interests and values. Given that the elderly and youth have higher counts, implement loyalty programs.</small>
+-   <small> Identify [**popular categories and products**]{style="color: purple;"}, target marketing efforts towards trending products, keep a close eye on inventory turnover rates, especially the stock levels of **Sweaters, T-Shirts, and Socks** to meet the high demand **in the Clothing category**.</small>
+-   <small> Based on the [**impact of product ratings**]{style="color: purple;"} on sales, optimize low-rated products, communicate customer feedback to suppliers to improve product quality, and enhance after-sales and logistics services.</small>
+-   <small> Optimize [**discount and promotional strategies**]{style="color: purple;"}, increase advertising for discounts/membership registration to enhance product exposure. Design seasonal promotions and discount campaigns based on related **seasonal changes and color popularity**.</small>
+:::
+:::
+
+## Project Division
+
+Here is our work division among four group members
+
+::: columns
+::: {.column width="35%"}
+![](https://img.redocn.com/sheji/20210909/shiliangbianpingtuanduifengonghezuochahua_11689557.jpg.285.jpg){width="350"}
+:::
+
+::: {.column width="65%"}
+-   [**REN Jingwen**]{style="color: ForestGreen;"}: Intro + Data Cleaning
+-   [**ZHAO Dan**]{style="color: Coral;"}: Q1 + Q2 + Q3
+-   [**KONG Yining**]{style="color: FireBrick;"}: Q4 + Q5 + Q6
+-   [**TANG Shanwen**]{style="color: DodgerBlue;"}: Q7 + Q8 + Recommendation
+:::
+:::
+
+## References
+
+-   https://www.kaggle.com/datasets/iamsouravbanerjee/customer-shopping-trends-dataset/data
+
+-   https://quarto.org/docs/presentations/revealjs/
+
+-   https://bookdown.org/yihui/rmarkdown/markdown-syntax.html
